@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cfeasy"
+dynamic = ["version"]
+description = "cloudflare made easy"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "Karthik", email = "karthik.rajgopal@hotmail.com"}]
+keywords = ['nbdev']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    "cloudflare>=4.3.1",
+    "fastcore>=1.12.31",
+]
+
+[project.urls]
+Repository = "https://github.com/vedicreader/cfeasy"
+Documentation = "https://vedicreader.github.io/cfeasy/"
+
+[project.entry-points.nbdev]
+cfeasy = "cfeasy._modidx:d"
+
+[tool.hatch.version]
+path = "cfeasy/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cfeasy"]
+[tool.nbdev]
+
+[dependency-groups]
+dev = [
+    "nbdev>=3.0.12",
+    "notebook>=7.5.5",
+]
