@@ -25,7 +25,7 @@ cfeasy needs a **Custom Token** — not a Global API Key. Go to
 | Account info | Account → Account Settings | **Read** |
 | Tunnel management | Account → Cloudflare Tunnel | **Edit** |
 
-![Cloudflare custom token setup](cloudflare.png)
+![Cloudflare custom token setup](nbs/cloudflare.png)
 
 ## DNS Records
 
