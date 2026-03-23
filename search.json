@@ -1,0 +1,72 @@
+[
+  {
+    "objectID": "core.html",
+    "href": "core.html",
+    "title": "cloudflare",
+    "section": "",
+    "text": "Thin wrapper around the official cloudflare Python SDK. Token is read from the CLOUDFLARE_API_TOKEN environment variable by default.\n\nsource\n\n\n\ndef setup_tunnel(\n    domain:str, name:str, tunnel_name:str | None=None, proxied:bool=True\n):\n\nOne-liner for VPS hosting. Creates (or reuses) a tunnel, sets up the CNAME subdomain, and returns (tunnel_id, token) ready for cloudflared_svc() in your docker-compose.\nUsage in fastops: tid, token = setup_tunnel(“example.com”, “app”) # → app.example.com # then in Compose: # .svc(“cloudflared”, **cloudflared_svc(token_env=…)) with CF_TUNNEL_TOKEN=token\n\nsource\n\n\n\n\ndef CF(\n    token:NoneType=None, timeout:int=10, kw:VAR_KEYWORD\n):\n\nCloudflare API wrapper using the official cloudflare Python SDK\n\n\n\nCreate a Custom Token in the Cloudflare dashboard (My Profile → API Tokens → Create Token):\n\n\n\n\n\n\n\nCapability\nRequired permission\n\n\n\n\ndns_read / DNS ops\nZone → DNS → Edit (scope to specific zone)\n\n\naccount_read / tunnel ops\nAccount → Account Settings → Read\n\n\ntunnel_read / tunnel ops\nAccount → Cloudflare Tunnel → Edit\n\n\n\nUse CF().verify() to confirm your token has the permissions it needs before running ops.\n\nc = CF()\nc.verify()\n\n{'result': True}",
+    "crumbs": [
+      "cloudflare"
+    ]
+  },
+  {
+    "objectID": "core.html#cf",
+    "href": "core.html#cf",
+    "title": "cloudflare",
+    "section": "",
+    "text": "Thin wrapper around the official cloudflare Python SDK. Token is read from the CLOUDFLARE_API_TOKEN environment variable by default.\n\nsource\n\n\n\ndef setup_tunnel(\n    domain:str, name:str, tunnel_name:str | None=None, proxied:bool=True\n):\n\nOne-liner for VPS hosting. Creates (or reuses) a tunnel, sets up the CNAME subdomain, and returns (tunnel_id, token) ready for cloudflared_svc() in your docker-compose.\nUsage in fastops: tid, token = setup_tunnel(“example.com”, “app”) # → app.example.com # then in Compose: # .svc(“cloudflared”, **cloudflared_svc(token_env=…)) with CF_TUNNEL_TOKEN=token\n\nsource\n\n\n\n\ndef CF(\n    token:NoneType=None, timeout:int=10, kw:VAR_KEYWORD\n):\n\nCloudflare API wrapper using the official cloudflare Python SDK\n\n\n\nCreate a Custom Token in the Cloudflare dashboard (My Profile → API Tokens → Create Token):\n\n\n\n\n\n\n\nCapability\nRequired permission\n\n\n\n\ndns_read / DNS ops\nZone → DNS → Edit (scope to specific zone)\n\n\naccount_read / tunnel ops\nAccount → Account Settings → Read\n\n\ntunnel_read / tunnel ops\nAccount → Cloudflare Tunnel → Edit\n\n\n\nUse CF().verify() to confirm your token has the permissions it needs before running ops.\n\nc = CF()\nc.verify()\n\n{'result': True}",
+    "crumbs": [
+      "cloudflare"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "cfeasy",
+    "section": "",
+    "text": "cfeasy is a thin wrapper around the official Cloudflare Python SDK. It lets you create DNS records and set up Zero Trust tunnels from Python with minimal boilerplate — ideal for VPS automation and self-hosting.\nverify() is a safe, read-only check — it lists your zones and tunnels and confirms the token can reach both. If it returns {'result': False}, your token is missing permissions. Set those up first.",
+    "crumbs": [
+      "cfeasy"
+    ]
+  },
+  {
+    "objectID": "index.html#api-token-setup",
+    "href": "index.html#api-token-setup",
+    "title": "cfeasy",
+    "section": "API Token Setup",
+    "text": "API Token Setup\ncfeasy needs a Custom Token — not a Global API Key. Go to dash.cloudflare.com/profile/api-tokens → Create Token → Custom Token and add these three permissions:\n\n\n\nCapability\nResource\nPermission\n\n\n\n\nDNS read/write\nZone → DNS\nEdit (scope to your zone)\n\n\nAccount info\nAccount → Account Settings\nRead\n\n\nTunnel management\nAccount → Cloudflare Tunnel\nEdit\n\n\n\n\n\n\nCloudflare custom token setup",
+    "crumbs": [
+      "cfeasy"
+    ]
+  },
+  {
+    "objectID": "index.html#dns-records",
+    "href": "index.html#dns-records",
+    "title": "cfeasy",
+    "section": "DNS Records",
+    "text": "DNS Records\nupsert_record is the main DNS method — it creates a record if it doesn’t exist, or replaces it if one already exists with the same name and type. No stale duplicates.\nYou can use cfeasy in any Python environment — a Jupyter notebook, a script, or an interactive shell. Just import CF and initialize it with your API token (or set the CLOUDFLARE_API_TOKEN environment variable and skip the argument). just go from cfeasy import * and you’re ready to manage your DNS and tunnels.\n\nfrom cfeasy import *\n\n\nc = CF()  # set CLOUDFLARE_API_TOKEN env var and just do CF() or pass a token directly CF('your-token-here')\n# Confirm your token has the right permissions before doing anything\nc.verify()  # → {'result': True}\n\n{'result': True}\n\n\n\n# A record pointing \"app.angalama.com\" at an IP\ndom, nm = 'angalama.com', 'app'\nc.upsert_record(dom, nm, \"1.2.3.4\")\n\n{'name': 'app.angalama.com',\n 'type': 'A',\n 'comment': None,\n 'content': '1.2.3.4',\n 'proxied': False,\n 'settings': {'ipv4_only': None, 'ipv6_only': None},\n 'tags': [],\n 'ttl': 1,\n 'id': '3819309b81252192134793a601f43737',\n 'created_on': datetime.datetime(2026, 3, 22, 20, 3, 29, 872980, tzinfo=TzInfo(0)),\n 'meta': {},\n 'modified_on': datetime.datetime(2026, 3, 22, 20, 3, 29, 872980, tzinfo=TzInfo(0)),\n 'proxiable': True,\n 'comment_modified_on': None,\n 'tags_modified_on': None}",
+    "crumbs": [
+      "cfeasy"
+    ]
+  },
+  {
+    "objectID": "index.html#tunnels",
+    "href": "index.html#tunnels",
+    "title": "cfeasy",
+    "section": "Tunnels",
+    "text": "Tunnels\nA Cloudflare Tunnel creates an outbound-only connection from your server to Cloudflare’s edge — no open firewall ports, no public IP needed. Traffic hits app.example.com, Cloudflare routes it through the tunnel to your cloudflared process, which forwards it to your local service.\nThe three pieces you need: 1. A tunnel — a named tunnel registered with your Cloudflare account 2. A DNS CNAME — pointing your subdomain at &lt;tunnel-id&gt;.cfargotunnel.com 3. A token — passed to cloudflared so it knows which tunnel to connect to\n\n# Step 1: create the tunnel\ntname = 'my-app'\nexists = L.filter(lambda x: x.get('name') == tname)\ntid = first(t)['id'] if (t:=exists(c.tunnels())) else c.create_tunnel(tname)['id']\n# Step 2: point the subdomain at it (CNAME → &lt;tid&gt;.cfargotunnel.com)\nc.tunnel_cname(dom, nm, tid)\n# Step 3: get the token for cloudflared\ntoken = c.tunnel_token(tid)",
+    "crumbs": [
+      "cfeasy"
+    ]
+  },
+  {
+    "objectID": "index.html#setup_tunnel-everything-in-one-call",
+    "href": "index.html#setup_tunnel-everything-in-one-call",
+    "title": "cfeasy",
+    "section": "setup_tunnel — Everything in One Call",
+    "text": "setup_tunnel — Everything in One Call\nAll three steps above collapse into a single method. If a tunnel with that name already exists, it reuses it rather than creating a duplicate.\n\n\n\n\n\n\n\nWhat it does\nResult\n\n\n\n\nCreates (or reuses) a tunnel named \"app\"\nIdempotent — safe to call repeatedly\n\n\nWires up app.example.com as a proxied CNAME\nPoints at &lt;tid&gt;.cfargotunnel.com\n\n\nReturns (tunnel_id, token)\nPass token as CF_TUNNEL_TOKEN to cloudflared\n\n\n\n\ntid, token = c.setup_tunnel(dom, nm)\n# cleanup\nc.delete_tunnel(tid)",
+    "crumbs": [
+      "cfeasy"
+    ]
+  }
+]
