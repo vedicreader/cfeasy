@@ -7,7 +7,7 @@ __all__ = ['CF']
 
 # %% ../nbs/00_core.ipynb #a6e48b4c
 from cloudflare import Cloudflare
-from fastcore.all import L, first, patch
+from fastcore.all import L, first
 
 # %% ../nbs/00_core.ipynb #297e5764
 class CF:
@@ -57,6 +57,12 @@ class CF:
         aid = account_id or self.account_id()
         return [t.model_dump() for t in self._c.zero_trust.tunnels.cloudflared.list(account_id=aid)]
 
+    def tunnel_id(self, name, account_id=None) -> str:
+        'Get tunnel ID by name'
+        t = first(L(self.tunnels(account_id=account_id)).filter(lambda x: x.get('name') == name))
+        if t is None: raise ValueError(f'Tunnel not found: {name}')
+        return t['id']
+
     def create_tunnel(self, name, account_id=None) -> dict:
         'Create a new Cloudflare tunnel'
         aid = account_id or self.account_id()
@@ -92,17 +98,19 @@ class CF:
 	        return dict(result=bool(self._c.zones.list() and self._c.zero_trust.tunnels.cloudflared.list(account_id=acc)))
         except Exception as e: return dict(result=False, err=str(e))
 
-@patch
-def setup_tunnel(self:CF, domain: str, name: str, tunnel_name: str | None = None, proxied: bool = True):
-    ''' One-liner for VPS hosting. Creates (or reuses) a tunnel, sets up the CNAME subdomain, and returns (tunnel_id, token) ready for cloudflared_svc() in your docker-compose.
+    def setup_tunnel(self, domain: str, name: str | None = None, tunnel_name: str | None = None, proxied: bool = True):
+        ''' One-liner for VPS hosting. Creates (or reuses) a tunnel, sets up the CNAME subdomain,
+        and returns (tunnel_id, token) ready for cloudflared_svc() in your docker-compose.
 
-    Usage in fastops:
-        tid, token = setup_tunnel("example.com", "app")   # → app.example.com
-        # then in Compose:
-        # .svc("cloudflared", **cloudflared_svc(token_env=...)) with CF_TUNNEL_TOKEN=token
-    '''
-    tname = tunnel_name or name
-    exists = L.filter(lambda x: x.get('name') == tname)
-    tid = first(t)['id'] if (t:=exists(self.tunnels())) else self.create_tunnel(tname)['id']
-    self.tunnel_cname(domain, name, tid, proxied=proxied)
-    return tid, self.tunnel_token(tid)
+        Usage:
+            tid, token = setup_tunnel("example.com", "app")   # → app.example.com
+            tid, token = setup_tunnel("example.com")          # → example.com (apex, CNAME-flattened)
+            # then in Compose:
+            # .svc("cloudflared", **cloudflared_svc(token_env=...)) with CF_TUNNEL_TOKEN=token
+        '''
+        n = name or domain
+        tname = tunnel_name or n
+        exists = L.filter(lambda x: x.get('name') == tname)
+        tid = first(t)['id'] if (t:=exists(self.tunnels())) else self.create_tunnel(tname)['id']
+        self.tunnel_cname(domain, n, tid, proxied=proxied)
+        return tid, self.tunnel_token(tid)

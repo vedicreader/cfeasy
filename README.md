@@ -25,7 +25,7 @@ cfeasy needs a **Custom Token** — not a Global API Key. Go to
 | Account info | Account → Account Settings | **Read** |
 | Tunnel management | Account → Cloudflare Tunnel | **Edit** |
 
-![Cloudflare custom token setup](nbs/cloudflare.png)
+![Cloudflare custom token setup](cloudflare.png)
 
 ## DNS Records
 
@@ -110,8 +110,29 @@ that name already exists, it reuses it rather than creating a duplicate.
 | Wires up `app.example.com` as a proxied CNAME | Points at `<tid>.cfargotunnel.com` |
 | Returns `(tunnel_id, token)` | Pass `token` as `CF_TUNNEL_TOKEN` to `cloudflared` |
 
+Pass `name` to point a subdomain, or omit it to point the apex domain
+directly (Cloudflare flattens the CNAME automatically).
+
 ``` python
+# Subdomain tunnel: app.example.com
 tid, token = c.setup_tunnel(dom, nm)
-# cleanup
-c.delete_tunnel(tid)
+tid, token
+```
+
+``` python
+# Apex tunnel: example.com itself (no subdomain)
+tid_apex, token_apex = c.setup_tunnel(dom)
+tid_apex, token_apex
+```
+
+``` python
+# Look up a tunnel ID by name — useful when you only have the name, not the ID
+c.tunnel_id(nm)          # → UUID for the "app" tunnel
+c.tunnel_id(dom)         # → UUID for the apex tunnel
+```
+
+``` python
+# Cleanup — delete by name instead of needing to track the ID
+c.delete_tunnel(c.tunnel_id(nm))
+c.delete_tunnel(c.tunnel_id(dom))
 ```

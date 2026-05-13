@@ -34,6 +34,13 @@ path = "cfeasy/__init__.py"
 packages = ["cfeasy"]
 [tool.nbdev]
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "/cfeasy",
+    "/README.md",
+    "/pyproject.toml",
+]
+
 [dependency-groups]
 dev = [
     "nbdev>=3.0.12",
