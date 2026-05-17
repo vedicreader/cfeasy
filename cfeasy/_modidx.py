@@ -21,4 +21,6 @@ d = { 'settings': { 'branch': 'main',
                              'cfeasy.core.CF.upsert_record': ('core.html#cf.upsert_record', 'cfeasy/core.py'),
                              'cfeasy.core.CF.verify': ('core.html#cf.verify', 'cfeasy/core.py'),
                              'cfeasy.core.CF.zone_id': ('core.html#cf.zone_id', 'cfeasy/core.py'),
-                             'cfeasy.core.CF.zones': ('core.html#cf.zones', 'cfeasy/core.py')}}}
+                             'cfeasy.core.CF.zones': ('core.html#cf.zones', 'cfeasy/core.py'),
+                             'cfeasy.core.mv_skill_md': ('core.html#mv_skill_md', 'cfeasy/core.py'),
+                             'cfeasy.core.repo_root': ('core.html#repo_root', 'cfeasy/core.py')}}}
