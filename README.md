@@ -51,10 +51,12 @@ out of your code.
 
 Before changing anything, call `verify`. It only reads: it looks up your
 account, lists your zones (a zone is a domain you manage on Cloudflare)
-and lists your tunnels. If all of that works it returns
-`{'result': True}`. If a call fails, usually because the token lacks one
-of the permissions above, it returns `{'result': False, 'err': ...}`
-with Cloudflare’s error message.
+and lists your tunnels. It also checks that the token is active. It
+returns `ok`, the token status, the account ID, the zone names and the
+tunnel count. If a check fails, usually because the token is expired or
+lacks one of the permissions above, `ok` is False and `errors` holds
+Cloudflare’s message for each failed check. Pass `domain` to check one
+zone instead of listing them all.
 
 ``` python
 from cfeasy import *
@@ -63,10 +65,15 @@ from cfeasy import *
 ``` python
 c = CF()  # set CLOUDFLARE_API_TOKEN env var and just do CF() or pass a token directly CF('your-token-here')
 # Confirm your token has the right permissions before doing anything
-c.verify()  # → {'result': True}
+c.verify()  # → {'ok': True, 'token': 'active', ...}
 ```
 
-    {'result': True}
+    {'ok': True,
+     'token': 'active',
+     'account': '…',
+     'zones': ['angalama.com'],
+     'tunnels': 1,
+     'errors': {}}
 
 ## DNS records
 
@@ -187,13 +194,13 @@ leaves its CNAME record in place, so remove that with `delete_record` if
 you no longer need it.
 
 ``` python
-# Look up a tunnel ID by name — useful when you only have the name, not the ID
+# Look up a tunnel ID by name: useful when you only have the name, not the ID
 c.tunnel_id(nm)          # → UUID for the "app" tunnel
 c.tunnel_id(dom)         # → UUID for the apex tunnel
 ```
 
 ``` python
-# Cleanup — delete by name instead of needing to track the ID
+# Cleanup: delete by name instead of needing to track the ID
 c.delete_tunnel(c.tunnel_id(nm))
 c.delete_tunnel(c.tunnel_id(dom))
 ```

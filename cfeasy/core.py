@@ -85,12 +85,28 @@ class CF:
 	    return self.upsert_record(domain, name, f"{tunnel_id}.cfargotunnel.com",
 	                              type='CNAME', proxied=proxied)
 
-    def verify(self) -> dict:
-        'Check, without changing anything, that the token can reach the account, its zones and its tunnels.'
-        try:
-	        acc = self.account_id()
-	        return dict(result=bool(self._c.zones.list() and self._c.zero_trust.tunnels.cloudflared.list(account_id=acc)))
-        except Exception as e: return dict(result=False, err=str(e))
+    def verify(self, domain=None, account_id=None) -> dict:
+        'Check, without changing anything, that the token is active and reaches its account, its zones (or `domain`) and its tunnels.'
+        r,errs = dict(token=None, account=None, zones=None, tunnels=None),{}
+        def chk(k, f):
+            try: r[k] = f()
+            except Exception as e: errs[k] = str(e)
+        def tok():
+            # account-owned tokens fail the user endpoint
+            try: return self._c.user.tokens.verify().status
+            except Exception:
+                if not r['account']: raise
+                return self._c.accounts.tokens.verify(account_id=r['account']).status
+        def zones():
+            if domain: self.zone_id(domain); return [domain]
+            if not (zs := [z['name'] for z in self.zones()]): raise ValueError('No zones visible')
+            return zs
+        chk('account', lambda: account_id or self.account_id())
+        chk('token', tok)
+        if r['token'] not in (None, 'active'): errs['token'] = f"Token is {r['token']}"
+        chk('zones', zones)
+        if r['account']: chk('tunnels', lambda: len(self.tunnels(r['account'])))
+        return dict(ok=not errs, **r, errors=errs)
 
     def setup_tunnel(self, domain: str, name: str | None = None, tunnel_name: str | None = None, proxied: bool = True):
         'Create or reuse a tunnel, point `name` (or the apex domain) at it, and return `(tunnel_id, token)`.'

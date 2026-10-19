@@ -2,6 +2,10 @@
 
 <!-- do not remove -->
 
+## 0.0.5
+
+- `verify` checks the token is active and the account, zones (or one `domain`) and tunnels are reachable, returning `ok`, each result and an `errors` dict; it used to return `{'result': True}` whenever the calls succeeded
+
 ## 0.0.4
 skill.md
 

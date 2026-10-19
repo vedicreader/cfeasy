@@ -19,11 +19,13 @@ shelling out to `wrangler` or hand-rolling REST calls.
 from cfeasy import CF
 c = CF()                  # reads CLOUDFLARE_API_TOKEN from the env
 c = CF('your-token')      # or pass one explicitly
-c.verify()                # → {'result': True} if the token has the right scopes
+c.verify()                # → {'ok': True, 'token': 'active', 'account': ..., 'zones': [...], 'tunnels': 0, 'errors': {}}
+c.verify('example.com')   # check one zone instead of listing them all
 ```
 
-If `verify()` returns `{'result': False, 'err': ...}`, the token is missing
-scopes. The required custom token permissions are:
+If `verify()` returns `ok=False`, `errors` names each failed check (`token`,
+`account`, `zones`, `tunnels`). A non-`active` token, or a failing `zones` or
+`tunnels` check, means the token is expired or missing scopes. The required custom token permissions are:
 
 | Capability | Resource | Permission |
 |------------|----------|------------|
