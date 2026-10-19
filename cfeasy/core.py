@@ -9,7 +9,7 @@ __all__ = ['CF', 'repo_root', 'mv_skill_md']
 
 # %% ../nbs/00_core.ipynb #a6e48b4c
 from cloudflare import Cloudflare
-from fastcore.all import L, first, Path
+from fastcore.all import L, first, Path, patch
 
 # %% ../nbs/00_core.ipynb #297e5764
 class CF:
@@ -118,6 +118,34 @@ class CF:
         tid = first(t)['id'] if (t:=exists(self.tunnels())) else self.create_tunnel(tname)['id']
         self.tunnel_cname(domain, n, tid, proxied=proxied)
         return tid, self.tunnel_token(tid)
+
+# %% ../nbs/00_core.ipynb #88aed5aa
+_RULE_KEYS = ('id', 'ref', 'description', 'expression', 'action', 'action_parameters', 'enabled')
+
+@patch
+def ruleset_upsert(self:CF, zid, rules, phase='http_request_cache_settings') -> bool:
+    'Put `rules` in the zone entrypoint for `phase`, replacing the rules with the same `ref` and keeping the rest; False when nothing changed.'
+    from cloudflare import NotFoundError
+    try: cur = [r.model_dump(exclude_none=True) for r in self._c.rulesets.phases.get(phase, zone_id=zid).rules or []]
+    except NotFoundError: cur = []
+    refs, same = {r['ref'] for r in rules}, lambda xs: [{k: x.get(k) for k in _RULE_KEYS[1:]} for x in xs]
+    if same([r for r in cur if r.get('ref') in refs]) == same(rules): return False
+    keep = [{k: r[k] for k in _RULE_KEYS if k in r} for r in cur if r.get('ref') not in refs]
+    self._c.rulesets.phases.update(phase, zone_id=zid, rules=keep + rules)
+    return True
+
+@patch
+def purge(self:CF, zid, prefixes=None, files=None, everything=False, fallback_all=True) -> list:
+    'Purge the zone cache by `files`, `prefixes` or `everything`, purging everything when a partial purge is refused and `fallback_all`; returns the purges sent.'
+    kws = [dict(purge_everything=True)] if everything else [{k: v} for k, v in dict(files=files, prefixes=prefixes).items() if v]
+    if not kws: raise ValueError('purge needs files, prefixes or everything=True')
+    try:
+        for kw in kws: self._c.cache.purge(zone_id=zid, **kw)
+    except Exception:
+        if everything or not fallback_all: raise
+        self._c.cache.purge(zone_id=zid, purge_everything=True)
+        return [dict(purge_everything=True)]
+    return kws
 
 # %% ../nbs/00_core.ipynb #357004bb
 def repo_root() -> Path:
