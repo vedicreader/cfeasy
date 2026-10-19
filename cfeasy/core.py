@@ -8,6 +8,7 @@ Docs: https://vedicreader.github.io/cfeasy/core.html.md"""
 __all__ = ['CF', 'repo_root', 'mv_skill_md']
 
 # %% ../nbs/00_core.ipynb #a6e48b4c
+import time
 from cloudflare import Cloudflare
 from fastcore.all import L, first, Path, patch, ifnone
 
@@ -122,31 +123,54 @@ class CF:
 # %% ../nbs/00_core.ipynb #88aed5aa
 _RULE_KEYS = ('id', 'ref', 'description', 'expression', 'action', 'action_parameters', 'enabled')
 _RULE_DEFAULTS = dict(description='', enabled=True)   # what Cloudflare stores for a rule that leaves them out
+_RULE_RO = ('version', 'last_updated', 'categories')   # Cloudflare sets these; an update does not send them
 
 @patch
 def ruleset_upsert(self:CF, zid, rules, phase='http_request_cache_settings') -> bool:
-    'Put `rules` in the zone entrypoint for `phase`, replacing the rules with the same `ref` and keeping the rest; False when nothing changed.'
+    'Put `rules` in the zone entrypoint for `phase`, replacing the rules with the same `ref` and keeping the rest whole; False when nothing changed.'
     from cloudflare import NotFoundError
     try: cur = [r.model_dump(exclude_none=True) for r in self._c.rulesets.phases.get(phase, zone_id=zid).rules or []]
     except NotFoundError: cur = []
-    refs, same = {r['ref'] for r in rules}, lambda xs: [{k: ifnone(x.get(k), _RULE_DEFAULTS.get(k)) for k in _RULE_KEYS[1:]} for x in xs]
+    refs, ks = {r['ref'] for r in rules}, [k for k in dict.fromkeys(_RULE_KEYS[1:] + tuple(k for r in rules for k in r)) if k not in ('id',) + _RULE_RO]
+    same = lambda xs: [{k: ifnone(x.get(k), _RULE_DEFAULTS.get(k)) for k in ks} for x in xs]
     if same([r for r in cur if r.get('ref') in refs]) == same(rules): return False
-    keep = [{k: r[k] for k in _RULE_KEYS if k in r} for r in cur if r.get('ref') not in refs]
+    keep = [{k: v for k, v in r.items() if k not in _RULE_RO} for r in cur if r.get('ref') not in refs]
     self._c.rulesets.phases.update(phase, zone_id=zid, rules=keep + rules)
     return True
 
+_PURGE_RETRY = {1134}   # Cloudflare's "rate limit reached" purge error
+_PURGE_REFUSED = ('plan', 'entitle', 'not allowed', 'permission', 'enterprise')
+
+def _purge_kind(e):
+    'Whether a purge error is worth a `retry`, a `refused` partial purge, or neither.'
+    from cloudflare import APIStatusError, APITimeoutError, RateLimitError
+    if isinstance(e, (APITimeoutError, RateLimitError)): return 'retry'
+    if not isinstance(e, APIStatusError): return None
+    if {x.code for x in e.errors} & _PURGE_RETRY: return 'retry'
+    if e.status_code == 403 or (e.status_code == 400 and any(w in str(x.message).lower() for x in e.errors for w in _PURGE_REFUSED)): return 'refused'
+
 @patch
-def purge(self:CF, zid, prefixes=None, files=None, everything=False, fallback_all=True) -> list:
-    'Purge the zone cache by `files`, `prefixes` or `everything`, purging everything when a partial purge is refused and `fallback_all`; returns the purges sent.'
+def _purge1(self:CF, zid, kw, tries=4, wait=1):
+    for i in range(tries):
+        try: return self._c.cache.purge(zone_id=zid, **kw)
+        except Exception as e:
+            if i == tries - 1 or _purge_kind(e) != 'retry': raise
+            time.sleep(wait * 2**i)
+
+@patch
+def purge(self:CF, zid, prefixes=None, files=None, everything=False, fallback_all=True, tries=4, wait=1) -> list:
+    'Purge the zone cache by `files`, `prefixes` or `everything`, retrying rate limits and timeouts, and purging everything when Cloudflare refuses a partial purge and `fallback_all`; returns the purges that succeeded.'
     kws = [dict(purge_everything=True)] if everything else [{k: v} for k, v in dict(files=files, prefixes=prefixes).items() if v]
     if not kws: raise ValueError('purge needs files, prefixes or everything=True')
-    try:
-        for kw in kws: self._c.cache.purge(zone_id=zid, **kw)
-    except Exception:
-        if everything or not fallback_all: raise
-        self._c.cache.purge(zone_id=zid, purge_everything=True)
-        return [dict(purge_everything=True)]
-    return kws
+    done = []
+    for kw in kws:
+        try: self._purge1(zid, kw, tries, wait)
+        except Exception as e:
+            if everything or not fallback_all or _purge_kind(e) != 'refused': raise
+            self._purge1(zid, dict(purge_everything=True), tries, wait)
+            return done + [dict(purge_everything=True)]
+        done.append(kw)
+    return done
 
 # %% ../nbs/00_core.ipynb #357004bb
 def repo_root() -> Path:

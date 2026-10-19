@@ -2,6 +2,12 @@
 
 <!-- do not remove -->
 
+## 0.0.8
+
+- `purge` purges everything only when Cloudflare refuses the partial purge, with HTTP 403 or a 400 naming the plan or a permission; it retries rate limits (429 or code 1134) and timeouts up to `tries=4` times with a doubling `wait`, and raises any other error instead of purging everything
+- After a fallback, `purge` returns the files purge that succeeded before the refused prefixes purge, then the purge of everything
+- `ruleset_upsert` keeps every rule it does not own whole, with keys such as `logging` and `ratelimit`, leaving out only Cloudflare's read-only `version`, `last_updated` and `categories`; it compares its own rules on every key they set
+
 ## 0.0.7
 
 - `ruleset_upsert` treats a rule with no `description` or `enabled` as Cloudflare stores it, `''` and true, so running it again with such a rule sends nothing and returns False
