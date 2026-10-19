@@ -2,6 +2,10 @@
 
 <!-- do not remove -->
 
+## 0.0.7
+
+- `ruleset_upsert` treats a rule with no `description` or `enabled` as Cloudflare stores it, `''` and true, so running it again with such a rule sends nothing and returns False
+
 ## 0.0.6
 
 - `ruleset_upsert` writes cache or custom firewall rules into a zone's entrypoint for a phase, replacing rules by `ref` and keeping the others; it returns False and sends nothing when the zone already has them

@@ -9,7 +9,7 @@ __all__ = ['CF', 'repo_root', 'mv_skill_md']
 
 # %% ../nbs/00_core.ipynb #a6e48b4c
 from cloudflare import Cloudflare
-from fastcore.all import L, first, Path, patch
+from fastcore.all import L, first, Path, patch, ifnone
 
 # %% ../nbs/00_core.ipynb #297e5764
 class CF:
@@ -121,6 +121,7 @@ class CF:
 
 # %% ../nbs/00_core.ipynb #88aed5aa
 _RULE_KEYS = ('id', 'ref', 'description', 'expression', 'action', 'action_parameters', 'enabled')
+_RULE_DEFAULTS = dict(description='', enabled=True)   # what Cloudflare stores for a rule that leaves them out
 
 @patch
 def ruleset_upsert(self:CF, zid, rules, phase='http_request_cache_settings') -> bool:
@@ -128,7 +129,7 @@ def ruleset_upsert(self:CF, zid, rules, phase='http_request_cache_settings') -> 
     from cloudflare import NotFoundError
     try: cur = [r.model_dump(exclude_none=True) for r in self._c.rulesets.phases.get(phase, zone_id=zid).rules or []]
     except NotFoundError: cur = []
-    refs, same = {r['ref'] for r in rules}, lambda xs: [{k: x.get(k) for k in _RULE_KEYS[1:]} for x in xs]
+    refs, same = {r['ref'] for r in rules}, lambda xs: [{k: ifnone(x.get(k), _RULE_DEFAULTS.get(k)) for k in _RULE_KEYS[1:]} for x in xs]
     if same([r for r in cur if r.get('ref') in refs]) == same(rules): return False
     keep = [{k: r[k] for k in _RULE_KEYS if k in r} for r in cur if r.get('ref') not in refs]
     self._c.rulesets.phases.update(phase, zone_id=zid, rules=keep + rules)
