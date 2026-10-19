@@ -2,6 +2,10 @@
 
 <!-- do not remove -->
 
+## 0.0.9
+
+- `purge` reaches Cloudflare only through the client's `_c`, so a stand-in for `CF` that binds `purge` alone purges again; 0.0.8 sent its requests through a second patched method, which such a stand-in replaced with a no-op
+
 ## 0.0.8
 
 - `purge` purges everything only when Cloudflare refuses the partial purge, with HTTP 403 or a 400 naming the plan or a permission; it retries rate limits (429 or code 1134) and timeouts up to `tries=4` times with a doubling `wait`, and raises any other error instead of purging everything

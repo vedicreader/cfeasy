@@ -149,10 +149,10 @@ def _purge_kind(e):
     if {x.code for x in e.errors} & _PURGE_RETRY: return 'retry'
     if e.status_code == 403 or (e.status_code == 400 and any(w in str(x.message).lower() for x in e.errors for w in _PURGE_REFUSED)): return 'refused'
 
-@patch
-def _purge1(self:CF, zid, kw, tries=4, wait=1):
+def _purge1(c, zid, kw, tries=4, wait=1):
+    'One purge request through SDK client `c`, retried with a doubling wait on a rate limit or timeout.'
     for i in range(tries):
-        try: return self._c.cache.purge(zone_id=zid, **kw)
+        try: return c.cache.purge(zone_id=zid, **kw)
         except Exception as e:
             if i == tries - 1 or _purge_kind(e) != 'retry': raise
             time.sleep(wait * 2**i)
@@ -164,10 +164,10 @@ def purge(self:CF, zid, prefixes=None, files=None, everything=False, fallback_al
     if not kws: raise ValueError('purge needs files, prefixes or everything=True')
     done = []
     for kw in kws:
-        try: self._purge1(zid, kw, tries, wait)
+        try: _purge1(self._c, zid, kw, tries, wait)
         except Exception as e:
             if everything or not fallback_all or _purge_kind(e) != 'refused': raise
-            self._purge1(zid, dict(purge_everything=True), tries, wait)
+            _purge1(self._c, zid, dict(purge_everything=True), tries, wait)
             return done + [dict(purge_everything=True)]
         done.append(kw)
     return done
