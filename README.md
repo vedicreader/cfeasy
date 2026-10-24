@@ -31,16 +31,15 @@ Open [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profil
 
 [`CF`](https://vedicreader.github.io/cfeasy/core.html#cf) takes the token as its first argument. If you leave it out, the SDK reads it from the `CLOUDFLARE_API_TOKEN` environment variable, which keeps the token out of your code.
 
-Before changing anything, call `verify`. It only reads: it looks up your account, lists your zones (a zone is a domain you manage on Cloudflare) and lists your tunnels. It also checks that the token is active. It returns `ok`, the token status, the account ID, the zone names and the tunnel count. If a check fails, usually because the token is expired or lacks one of the permissions above, `ok` is False and `errors` holds Cloudflare’s message for each failed check. Pass `domain` to check one zone instead of listing them all.
+Set `CLOUDFLARE_API_TOKEN` before you call [`CF()`](https://vedicreader.github.io/cfeasy/core.html#cf). To pass the token directly, use `CF('your-token')`. Before changing anything, call `verify`. It only reads: it looks up your account, lists your zones (a zone is a domain you manage on Cloudflare) and lists your tunnels. It also checks that the token is active. It returns `ok`, the token status, the account ID, the zone names and the tunnel count. If a check fails, usually because the token is expired or lacks one of the permissions above, `ok` is False and `errors` holds Cloudflare’s message for each failed check. Pass `domain` to check one zone instead of listing them all.
 
 ``` python
 from cfeasy import *
 ```
 
 ``` python
-c = CF()  # set CLOUDFLARE_API_TOKEN env var and just do CF() or pass a token directly CF('your-token-here')
-# Confirm your token has the right permissions before doing anything
-c.verify()  # → {'ok': True, 'token': 'active', ...}
+c = CF()
+c.verify()  # -> {'ok': True, 'token': 'active', ...}
 ```
 
     {'ok': True,
@@ -54,12 +53,11 @@ c.verify()  # → {'ok': True, 'token': 'active', ...}
 
 A DNS record tells the internet where a name such as `app.angalama.com` points. An A record holds an IPv4 address, and a CNAME record holds another name to look up instead.
 
-`upsert_record` is the method to use for writing a record, because running it a second time leaves you with the same result instead of a duplicate. You give it the domain, the name, and the content. A name without a dot, such as `app`, is taken as a subdomain of the domain; a name with a dot is used as written. The record type defaults to A.
+`upsert_record` is the method to use for writing a record, because running it a second time leaves you with the same result instead of a duplicate. You give it the domain, the name, and the content. The name `@` means the domain itself. A name that equals the domain, or ends with a dot and the domain, is used as written. Any other name, such as `app` or `api.internal`, is a subdomain of the domain. The record type defaults to A.
 
-The method first looks at the records that already exist under that name. If one has the same type and content, it is returned as it is. Otherwise the old records under the name are deleted, whatever their type, and the new record is created. The example below points `app.angalama.com` at the address 1.2.3.4 and returns the record as Cloudflare stored it:
+The method looks at the records of the requested type under that name. Records of other types stay untouched. If none exists, it creates the record. Otherwise it keeps one record: the first with the requested content, else the first of that type. It updates the kept record in place when its content or `proxied` setting differs. It deletes the other records of that type under the name. The example below points `app.angalama.com` at the address 1.2.3.4 and returns the record as Cloudflare stored it:
 
 ``` python
-# A record pointing "app.angalama.com" at an IP
 dom, nm = 'angalama.com', 'app'
 c.upsert_record(dom, nm, "1.2.3.4")
 ```
@@ -93,13 +91,10 @@ Three things have to exist for this to work:
 The cell below makes each one by hand. `tunnels` lists the account’s tunnels, so the code reuses a tunnel called `my-app` if there is one and calls `create_tunnel` if not. `tunnel_cname` writes the CNAME record through `upsert_record`, with Cloudflare’s proxy turned on, which a tunnel needs. `tunnel_token` fetches the token.
 
 ``` python
-# Step 1: create the tunnel
 tname = 'my-app'
 exists = L.filter(lambda x: x.get('name') == tname)
 tid = first(t)['id'] if (t:=exists(c.tunnels())) else c.create_tunnel(tname)['id']
-# Step 2: point the subdomain at it (CNAME → <tid>.cfargotunnel.com)
 c.tunnel_cname(dom, nm, tid)
-# Step 3: get the token for cloudflared
 token = c.tunnel_token(tid)
 ```
 
@@ -112,13 +107,11 @@ Give it a domain and a subdomain name to serve `app.example.com`, as in the firs
 The tunnel is named after the subdomain, or after the domain when there is no subdomain; pass `tunnel_name` to choose another name. If a tunnel with that name already exists it is reused, so calling `setup_tunnel` again does not make a second one.
 
 ``` python
-# Subdomain tunnel: app.example.com
 tid, token = c.setup_tunnel(dom, nm)
 tid, token
 ```
 
 ``` python
-# Apex tunnel: example.com itself (no subdomain)
 tid_apex, token_apex = c.setup_tunnel(dom)
 tid_apex, token_apex
 ```
@@ -126,25 +119,24 @@ tid_apex, token_apex
 `tunnel_id` finds a tunnel’s ID from its name, which helps when you set a tunnel up earlier and kept only the name. `setup_tunnel` names a tunnel after its subdomain, or after the domain for an apex tunnel, so those are the names to look up. `delete_tunnel` removes a tunnel by ID; together the two clean up both tunnels made above. Deleting a tunnel leaves its CNAME record in place, so remove that with `delete_record` if you no longer need it.
 
 ``` python
-# Look up a tunnel ID by name: useful when you only have the name, not the ID
-c.tunnel_id(nm)          # → UUID for the "app" tunnel
-c.tunnel_id(dom)         # → UUID for the apex tunnel
+c.tunnel_id(nm)          # -> UUID of the `app` tunnel
+c.tunnel_id(dom)         # -> UUID of the apex tunnel
 ```
 
 ``` python
-# Cleanup: delete by name instead of needing to track the ID
 c.delete_tunnel(c.tunnel_id(nm))
 c.delete_tunnel(c.tunnel_id(dom))
 ```
 
 ## Cache rules and purges
 
-`ruleset_upsert` writes cache rules or custom firewall rules into a zone. It replaces your rules by their `ref`, keeps everyone else’s whole, and returns False when the zone already has them, so a deploy can run it every time. `purge` empties the cache by URL, by URL prefix or entirely. It retries rate limits and timeouts with backoff. If Cloudflare refuses a prefix purge on your plan, it purges everything instead and tells you so in its return value; any other error raises. Both need a token with the matching zone permissions: Cache Rules -\> Edit, Zone WAF -\> Edit for firewall rules, and Cache Purge -\> Purge.
+`ruleset_upsert` writes cache rules or custom firewall rules into a zone. It replaces your rules by their `ref`, keeps everyone else’s whole, and returns False when the zone already has them. A deploy can run it every time. `purge` empties the cache by URL, by URL prefix or entirely. It retries rate limits, connection errors, HTTP 408, HTTP 409 and HTTP 5xx responses. It waits before each retry, and each wait is twice the previous wait. By default, `purge` raises a refusal caused by a plan or permission restriction. Set `fallback_all=True` to request a full purge after the refusal instead, and `purge` reports that in its return value. Any other error raises. Both need a token with the matching zone permissions: Cache Rules -\> Edit, Zone WAF -\> Edit for firewall rules, and Cache Purge -\> Purge.
 
 ``` python
 zid = c.zone_id(dom)
 rule = dict(ref='static', expression='starts_with(http.request.uri.path, "/static/")', action='set_cache_settings',
             action_parameters=dict(cache=True), enabled=True)
 c.ruleset_upsert(zid, [rule])                # True the first time, False after
-c.purge(zid, prefixes=[f'{dom}/static/'])   # [{'prefixes': [...]}], or [{'purge_everything': True}] if refused
+c.purge(zid, prefixes=[f'{dom}/static/'])                      # [{'prefixes': [...]}], raises if refused
+c.purge(zid, prefixes=[f'{dom}/static/'], fallback_all=True)   # [{'purge_everything': True}] if refused
 ```

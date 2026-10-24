@@ -40,15 +40,23 @@ class CF:
         'Delete the DNS record `record_id` from the zone `zone_id`.'
         self._c.dns.records.delete(record_id, zone_id=zone_id)
 
+    def _fqdn(self, domain, name) -> str:
+        'Return the full record name for `name` in `domain`, reading `@` and a trailing dot as the apex.'
+        n = name.rstrip('.')
+        return domain if n == '@' else n if n == domain or n.endswith(f'.{domain}') else f'{n}.{domain}'
+
     def upsert_record(self, domain, name, content, type='A', proxied=False) -> dict:
-        'Make `name` in `domain` point at `content`, keeping a matching record and replacing any others under that name.'
+        'Make `name` in `domain` hold one `type` record with `content` and `proxied`, updating it in place and leaving other record types alone.'
         zid = self.zone_id(domain)
-        f = name if '.' in name else f'{name}.{domain}'
-        existing = list(self._c.dns.records.list(zone_id=zid, name=f))
-        for r in existing:
-            if r.type == type and r.content == content: return r.model_dump()
-            self.delete_record(zid, r.id)
-        return self.create_record(zid, type, name, content, proxied=proxied)
+        f = self._fqdn(domain, name)
+        same = [r for r in self._c.dns.records.list(zone_id=zid, name=f) if r.type == type]
+        if not same: return self.create_record(zid, type, f, content, proxied=proxied)
+        keep = first(same, lambda r: r.content == content) or same[0]
+        if keep.content == content and keep.proxied == proxied: res = keep
+        else: res = self._c.dns.records.update(keep.id, zone_id=zid, type=type, name=f, content=content, ttl=1, proxied=proxied)
+        for r in same:
+            if r.id != keep.id: self.delete_record(zid, r.id)
+        return res.model_dump()
 
     def account_id(self) -> str:
         'Return the ID of the first account the token can see.'
@@ -84,9 +92,11 @@ class CF:
         return result if isinstance(result, str) else result.token
 
     def tunnel_cname(self, domain: str, name: str, tunnel_id: str, proxied: bool = True) -> dict:
-	    'Point `name` in `domain` at a tunnel with a CNAME record to `<tunnel_id>.cfargotunnel.com`.'
-	    return self.upsert_record(domain, name, f"{tunnel_id}.cfargotunnel.com",
-	                              type='CNAME', proxied=proxied)
+        'Point `name` in `domain` at a tunnel with a CNAME record to `<tunnel_id>.cfargotunnel.com`, first deleting the A and AAAA records at that name.'
+        zid, f = self.zone_id(domain), self._fqdn(domain, name)
+        for r in self._c.dns.records.list(zone_id=zid, name=f):
+            if r.type in ('A', 'AAAA'): self.delete_record(zid, r.id)
+        return self.upsert_record(domain, name, f"{tunnel_id}.cfargotunnel.com", type='CNAME', proxied=proxied)
 
     def verify(self, domain=None, account_id=None) -> dict:
         'Check, without changing anything, that the token is active and reaches its account, its zones (or `domain`) and its tunnels.'
@@ -143,14 +153,16 @@ _PURGE_REFUSED = ('plan', 'entitle', 'not allowed', 'permission', 'enterprise')
 
 def _purge_kind(e):
     'Whether a purge error is worth a `retry`, a `refused` partial purge, or neither.'
-    from cloudflare import APIStatusError, APITimeoutError, RateLimitError
-    if isinstance(e, (APITimeoutError, RateLimitError)): return 'retry'
+    from cloudflare import APIConnectionError, APIStatusError, RateLimitError
+    if isinstance(e, (APIConnectionError, RateLimitError)): return 'retry'
     if not isinstance(e, APIStatusError): return None
-    if {x.code for x in e.errors} & _PURGE_RETRY: return 'retry'
-    if e.status_code == 403 or (e.status_code == 400 and any(w in str(x.message).lower() for x in e.errors for w in _PURGE_REFUSED)): return 'refused'
+    if e.status_code in (408, 409) or e.status_code >= 500: return 'retry'
+    errs = e.errors or []
+    if {x.code for x in errs} & _PURGE_RETRY: return 'retry'
+    if e.status_code == 403 or (e.status_code == 400 and any(w in str(x.message).lower() for x in errs for w in _PURGE_REFUSED)): return 'refused'
 
 def _purge1(c, zid, kw, tries=4, wait=1):
-    'One purge request through SDK client `c`, retried with a doubling wait on a rate limit or timeout.'
+    'One purge request through SDK client `c`, retried with a doubling wait on a rate limit, a connection error, HTTP 408, HTTP 409 or a 5xx response.'
     for i in range(tries):
         try: return c.cache.purge(zone_id=zid, **kw)
         except Exception as e:
@@ -158,16 +170,16 @@ def _purge1(c, zid, kw, tries=4, wait=1):
             time.sleep(wait * 2**i)
 
 @patch
-def purge(self:CF, zid, prefixes=None, files=None, everything=False, fallback_all=True, tries=4, wait=1) -> list:
-    'Purge the zone cache by `files`, `prefixes` or `everything`, retrying rate limits and timeouts, and purging everything when Cloudflare refuses a partial purge and `fallback_all`; returns the purges that succeeded.'
+def purge(self:CF, zid, prefixes=None, files=None, everything=False, fallback_all=False, tries=4, wait=1) -> list:
+    'Purge the zone cache by `files`, `prefixes` or `everything`, retrying rate limits, connection errors, HTTP 408, HTTP 409 and 5xx responses; purges everything when Cloudflare refuses a partial purge and `fallback_all=True`; returns the purges that succeeded.'
     kws = [dict(purge_everything=True)] if everything else [{k: v} for k, v in dict(files=files, prefixes=prefixes).items() if v]
     if not kws: raise ValueError('purge needs files, prefixes or everything=True')
-    done = []
+    done, client = [], self._c.with_options(max_retries=0)
     for kw in kws:
-        try: _purge1(self._c, zid, kw, tries, wait)
+        try: _purge1(client, zid, kw, tries, wait)
         except Exception as e:
             if everything or not fallback_all or _purge_kind(e) != 'refused': raise
-            _purge1(self._c, zid, dict(purge_everything=True), tries, wait)
+            _purge1(client, zid, dict(purge_everything=True), tries, wait)
             return done + [dict(purge_everything=True)]
         done.append(kw)
     return done

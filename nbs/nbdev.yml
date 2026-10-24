@@ -7,3 +7,8 @@ website:
   description: "cloudflare made easy"
   repo-branch: main
   repo-url: "https://github.com/vedicreader/cfeasy"
+
+format-links:
+  - html
+  - format: commonmark
+    text: Markdown
